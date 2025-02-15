@@ -2,309 +2,347 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Color Detection Tool</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-  <!-- 1) Define Module with onRuntimeInitialized so we know when OpenCV is ready -->
-  <script>
-    let cvReady = false;
-    var Module = {
-      onRuntimeInitialized() {
-        cvReady = true;
-        console.log("OpenCV.js runtime has initialized!");
-      }
-    };
-  </script>
-
-  <!-- 2) Load opencv.js (no async/defer) so we guarantee it loads before our code runs -->
-  <script src="https://docs.opencv.org/4.x/opencv.js" type="text/javascript"></script>
+  <title>Unique Color Extractor with Pie Chart & XLSX Export</title>
+  <!-- TensorFlow.js (optional for object detection / AI) -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.19.0/dist/tf.min.js"></script>
+  <!-- coco-ssd (optional for object detection / AI) -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.1/dist/coco-ssd.min.js"></script>
+  <!-- Tesseract.js (optional for OCR / AI) -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+  <!-- Chart.js for pie chart -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- SheetJS (xlsx) for exporting Excel files -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 
   <style>
     body {
       font-family: Arial, sans-serif;
-      background: #f7f7f7;
-      margin: 0; 
-      padding: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      min-height: 100vh;
+      margin: 20px;
+      max-width: 800px;
     }
-    header {
-      background: #333;
-      color: #fff;
-      width: 100%;
-      text-align: center;
+
+    h2, h3 {
+      margin-top: 30px;
+    }
+
+    /* Section styling */
+    .section {
+      margin-bottom: 40px;
+      border: 1px solid #ddd;
       padding: 15px;
+      border-radius: 6px;
+      background: #f9f9f9;
     }
-    h1 {
-      margin: 0;
-      font-weight: normal;
+    .section h3 {
+      margin-top: 0;
     }
-    #main-content {
-      width: 90%;
-      max-width: 1000px;
-      margin: 20px auto;
-      background: #fff;
-      border-radius: 8px;
-      box-shadow: 0 0 10px rgba(0,0,0,0.1);
-      padding: 20px;
-      position: relative;
-    }
-    #controls-container {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 15px;
+
+    /* Image preview */
+    #uploadedImage {
+      max-width: 300px;
+      display: block;
       margin-bottom: 20px;
     }
-    #upload-button {
-      padding: 8px 12px;
-      font-size: 14px;
-      cursor: pointer;
-    }
-    #canvas-container {
-      position: relative;
+
+    /* Color container layout */
+    #colorContainer {
       display: flex;
-      justify-content: center;
-      align-items: center;
-      overflow: hidden;
-      border: 2px solid #ccc;
-      border-radius: 6px;
-      width: 600px;
-      height: 400px; 
-      margin: 0 auto;
-      background: #eee;
+      flex-wrap: wrap;
+      gap: 4px; /* Spacing between color boxes */
+      margin-top: 10px;
     }
-    #snapshot-canvas {
-      background: #ddd;
-    }
-    #spinner {
-      width: 36px;
-      height: 36px;
-      border: 4px solid rgba(0,0,0,0.1);
-      border-radius: 50%;
-      border-left-color: #09f;
-      animation: spin 1s linear infinite;
-      margin: 10px auto;
-      display: none;
-      position: absolute;
-    }
-    @keyframes spin {
-      100% { transform: rotate(360deg); }
-    }
-    #color-results {
-      margin-top: 20px;
-    }
-    .color-item {
-      display: flex;
-      align-items: center;
-      margin-bottom: 8px;
-    }
+
+    /* Individual color box */
     .color-box {
       width: 30px;
       height: 30px;
-      margin-right: 10px;
-      border: 1px solid #aaa;
+      border: 1px solid #ccc;
+      display: inline-block;
     }
-    .color-info {
-      font-size: 0.9em;
-      color: #333;
+
+    /* Chart styling */
+    #colorChart {
+      max-width: 600px; /* Limit chart display size if needed */
+      margin-top: 20px;
+    }
+
+    /* Button styling */
+    button {
+      cursor: pointer;
+      margin-top: 10px;
+      padding: 8px 16px;
     }
   </style>
 </head>
 <body>
-<header>
-  <h1>Color Detection Tool</h1>
-</header>
 
-<div id="main-content">
-  <div id="controls-container">
-    <input type="file" id="upload-button" accept="image/*" />
+  <h2>Unique Color Extractor with Pie Chart & XLSX Export</h2>
+
+  <!-- 1) UPLOAD SECTION -->
+  <div class="section" id="uploadSection">
+    <h3>1. Upload an Image</h3>
+    <input type="file" id="fileInput" accept="image/*" />
+    <button id="processBtn">Process Image</button>
   </div>
 
-  <div id="canvas-container">
-    <canvas id="snapshot-canvas"></canvas>
-    <div id="spinner"></div>
+  <!-- 2) PREVIEW SECTION -->
+  <div class="section" id="previewSection">
+    <h3>2. Preview</h3>
+    <img id="uploadedImage" alt="Uploaded Image" />
   </div>
 
-  <div id="color-results"></div>
-</div>
+  <!-- 3) RESULT SECTION (COLORS + EXPORT) -->
+  <div class="section" id="resultSection">
+    <h3>3. Extracted Colors</h3>
+    <p>Below are the unique colors sampled from the image. Hover to see RGB, count, and % info.</p>
+    <div id="colorContainer"></div>
+    <button id="exportBtn">Export Colors to XLSX</button>
+  </div>
 
-<!-- 3) Our main script that depends on OpenCV -->
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-  const uploadButton    = document.getElementById('upload-button');
-  const spinner         = document.getElementById('spinner');
-  const snapshotCanvas  = document.getElementById('snapshot-canvas');
-  const ctx             = snapshotCanvas.getContext('2d');
-  const colorResults    = document.getElementById('color-results');
+  <!-- 4) CHART SECTION -->
+  <div class="section" id="chartSection">
+    <h3>4. Color Distribution Pie Chart</h3>
+    <canvas id="colorChart"></canvas>
+  </div>
 
-  // Small dictionary for approximate color names (demo). 
-  // For bigger coverage, you can expand this array or use a color library.
-  const colorNameMap = [
-    { name: "White",   rgb: [255,255,255] },
-    { name: "Black",   rgb: [0,0,0]       },
-    { name: "Red",     rgb: [255,0,0]     },
-    { name: "Green",   rgb: [0,255,0]     },
-    { name: "Blue",    rgb: [0,0,255]     },
-    { name: "Yellow",  rgb: [255,255,0]   },
-    { name: "Cyan",    rgb: [0,255,255]   },
-    { name: "Magenta", rgb: [255,0,255]   },
-    { name: "Gray",    rgb: [128,128,128] },
-    { name: "Maroon",  rgb: [128,0,0]     },
-    { name: "Olive",   rgb: [128,128,0]   },
-    { name: "Navy",    rgb: [0,0,128]     },
-    // Add more if desired...
-  ];
+  <script>
+    // ==== GLOBAL VARIABLES ====
+    const fileInput = document.getElementById('fileInput');
+    const uploadedImage = document.getElementById('uploadedImage');
+    const processBtn = document.getElementById('processBtn');
+    const colorContainer = document.getElementById('colorContainer');
+    const exportBtn = document.getElementById('exportBtn');
 
-  // Approximate color name from our list above
-  function approximateColorName(r, g, b) {
-    let closestName = "Unknown";
-    let minDist = Infinity;
-    colorNameMap.forEach(({ name, rgb }) => {
-      let dr = r - rgb[0];
-      let dg = g - rgb[1];
-      let db = b - rgb[2];
-      let dist = dr*dr + dg*dg + db*db;
-      if(dist < minDist) {
-        minDist = dist;
-        closestName = name;
+    let imageLoaded = false;
+    let colorChartInstance = null;  // Will hold the Chart.js instance
+    let colorDataList = [];         // We'll store color info here for XLSX export
+
+    // ==== 1) HANDLE IMAGE UPLOAD ====
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const imageURL = URL.createObjectURL(file);
+      uploadedImage.src = imageURL;
+      imageLoaded = true;
+    });
+
+    // ==== 2) PROCESS BUTTON EVENT ====
+    processBtn.addEventListener('click', () => {
+      if (!imageLoaded) {
+        alert("Please upload an image first.");
+        return;
       }
+      processImageColors();
     });
-    return closestName;
-  }
 
-  // Convert (r,g,b) to #RRGGBB
-  function rgbToHex(r, g, b) {
-    let toHex = c => {
-      let hex = c.toString(16);
-      return hex.length === 1 ? "0" + hex : hex;
-    };
-    return "#" + toHex(r) + toHex(g) + toHex(b);
-  }
+    // ==== 3) RESIZE FUNCTION ====
+    function resizeImage(imgElement, maxWidth, maxHeight) {
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
 
-  // When user selects a file
-  uploadButton.addEventListener('change', (evt) => {
-    const file = evt.target.files[0];
-    if (!file) return;
+      let width = imgElement.naturalWidth;
+      let height = imgElement.naturalHeight;
+      const aspectRatio = width / height;
 
-    // Ensure OpenCV is ready before proceeding
-    if (!cvReady) {
-      alert('OpenCV is still loading. Please wait a moment and try again.');
-      // Reset file input so user can try again
-      evt.target.value = "";
-      return;
+      // Calculate new dimensions while maintaining aspect ratio
+      if (width > maxWidth) {
+        width = maxWidth;
+        height = Math.round(width / aspectRatio);
+      }
+      if (height > maxHeight) {
+        height = maxHeight;
+        width = Math.round(height * aspectRatio);
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      ctx.drawImage(imgElement, 0, 0, width, height);
+
+      return canvas;
     }
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const dataURL = e.target.result;
-      const img = new Image();
-      img.src = dataURL;
-      img.onload = () => {
-        // Clear old results
-        colorResults.innerHTML = '';
+    // ==== 4) COLOR EXTRACTION & PIE CHART ====
+    function processImageColors() {
+      // Clear previous data
+      colorContainer.innerHTML = '';
+      colorDataList = [];  // Reset the array for XLSX export
 
-        // Resize canvas to keep aspect ratio, but max 600×400
-        const maxWidth  = 600;
-        const maxHeight = 400;
-        let w = img.width;
-        let h = img.height;
-        const aspect = w / h;
+      // Destroy previous chart if exists
+      if (colorChartInstance) {
+        colorChartInstance.destroy();
+      }
 
-        if (w > maxWidth) {
-          w = maxWidth;
-          h = Math.floor(w / aspect);
+      // 4a) Resize for performance
+      const canvas = resizeImage(uploadedImage, 300, 300);
+      const ctx = canvas.getContext("2d");
+      const { width, height } = canvas;
+
+      // 4b) Get pixel data
+      const imageData = ctx.getImageData(0, 0, width, height);
+      const data = imageData.data;
+
+      // 4c) A map to store color counts
+      const colorCountMap = {};
+
+      // 4d) Sampling step to skip pixels
+      const step = 5; // Increase to reduce number of processed pixels
+
+      // 4e) Count color occurrences
+      let totalCount = 0; // total sampled pixels
+      for (let y = 0; y < height; y += step) {
+        for (let x = 0; x < width; x += step) {
+          const index = (y * width + x) * 4;
+          const r = data[index];
+          const g = data[index + 1];
+          const b = data[index + 2];
+          // alpha = data[index + 3]; // Usually 255
+
+          const colorKey = `${r},${g},${b}`;
+          if (!colorCountMap[colorKey]) {
+            colorCountMap[colorKey] = 0;
+          }
+          colorCountMap[colorKey]++;
+          totalCount++;
         }
-        if (h > maxHeight) {
-          h = maxHeight;
-          w = Math.floor(h * aspect);
+      }
+
+      // 4f) Create color swatches
+      const uniqueColorKeys = Object.keys(colorCountMap);
+      uniqueColorKeys.forEach((colorKey) => {
+        const [r, g, b] = colorKey.split(',').map(Number);
+        const count = colorCountMap[colorKey];
+        const percentage = (count / totalCount) * 100;
+        const hex = rgbToHex(r, g, b);
+
+        // Create a color swatch
+        const colorBox = document.createElement('div');
+        colorBox.className = 'color-box';
+        colorBox.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
+        colorBox.title = `RGB: ${r},${g},${b}\nHEX: ${hex}\nCount: ${count}\n% of Sample: ${percentage.toFixed(2)}%`;
+        colorContainer.appendChild(colorBox);
+
+        // Store for XLSX export
+        colorDataList.push({
+          r, g, b,
+          hex,
+          count,
+          percentage: percentage
+        });
+      });
+
+      // 4g) Prepare Pie Chart Data
+      const labels = [];
+      const chartData = [];
+      const backgroundColors = [];
+
+      uniqueColorKeys.forEach((colorKey) => {
+        const count = colorCountMap[colorKey];
+        const percent = (count / totalCount) * 100;
+        labels.push(colorKey); // e.g. "123,45,67"
+        chartData.push(percent);
+        // The slice color is the same as the colorKey
+        backgroundColors.push(`rgb(${colorKey})`);
+      });
+
+      // 4h) Render the Pie Chart
+      const chartCtx = document.getElementById('colorChart').getContext('2d');
+      colorChartInstance = new Chart(chartCtx, {
+        type: 'pie',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Color Distribution (%)',
+            data: chartData,
+            backgroundColor: backgroundColors,
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: {
+              display: true,
+              position: 'right',
+              labels: {
+                generateLabels: (chart) => {
+                  const data = chart.data;
+                  if (data.labels.length) {
+                    return data.labels.map((label, i) => {
+                      const rgbParts = label.split(',');
+                      const r = rgbParts[0];
+                      const g = rgbParts[1];
+                      const b = rgbParts[2];
+                      const val = data.datasets[0].data[i];
+                      return {
+                        text: `rgb(${r},${g},${b}) - ${val.toFixed(2)}%`,
+                        fillStyle: data.datasets[0].backgroundColor[i],
+                        hidden: false,
+                        index: i
+                      };
+                    });
+                  }
+                  return [];
+                }
+              }
+            }
+          }
         }
+      });
+    }
 
-        snapshotCanvas.width = w;
-        snapshotCanvas.height = h;
-        ctx.drawImage(img, 0, 0, w, h);
-
-        // Now run color detection
-        detectColors(w, h);
+    // Helper: Convert (R,G,B) to HEX
+    function rgbToHex(r, g, b) {
+      const toHex = (c) => {
+        const hex = c.toString(16);
+        return hex.length === 1 ? '0' + hex : hex;
       };
-    };
-    reader.readAsDataURL(file);
-  });
-
-  // Use k-means to find ~5 dominant colors
-  function detectColors(canvasW, canvasH) {
-    spinner.style.display = 'block';
-
-    // 1) Create mats
-    let src = new cv.Mat(canvasH, canvasW, cv.CV_8UC4);
-    let imageData = ctx.getImageData(0, 0, canvasW, canvasH);
-    src.data.set(imageData.data);
-
-    // 2) Convert RGBA to BGR for easier kmeans
-    let srcBGR = new cv.Mat();
-    cv.cvtColor(src, srcBGR, cv.COLOR_RGBA2BGR);
-
-    // 3) Flatten Nx3 for kmeans
-    // Convert to float for kmeans
-    let samples = new cv.Mat();
-    srcBGR.convertTo(samples, cv.CV_32F);
-    samples = samples.reshape(1, canvasW * canvasH); // Nx3
-
-    // 4) K-means
-    let K = 5;  // number of dominant colors to extract
-    let bestLabels = new cv.Mat();
-    let centers = new cv.Mat();
-    // Stop criteria: up to 10 iterations or move centers by <=1.0
-    let criteria = new cv.TermCriteria(cv.TermCriteria_EPS + cv.TermCriteria_MAX_ITER, 10, 1.0);
-    let attempts = 3;
-    let flags = cv.KMEANS_RANDOM_CENTERS;
-
-    cv.kmeans(samples, K, bestLabels, criteria, attempts, flags, centers);
-
-    // 5) Convert centers to 8U to read them easily
-    centers.convertTo(centers, cv.CV_8U);
-
-    // Extract each center's BGR
-    let colorSet = [];
-    for (let i = 0; i < K; i++) {
-      let b = centers.data[i*3 + 0];
-      let g = centers.data[i*3 + 1];
-      let r = centers.data[i*3 + 2];
-      colorSet.push({r, g, b});
+      return '#' + toHex(r) + toHex(g) + toHex(b);
     }
 
-    // Cleanup
-    src.delete();
-    srcBGR.delete();
-    samples.delete();
-    bestLabels.delete();
-    centers.delete();
-
-    spinner.style.display = 'none';
-
-    // Display the ~5 dominant colors
-    colorResults.innerHTML = '<h3>Detected Dominant Colors:</h3>';
-    colorSet.forEach(col => {
-      let {r, g, b} = col;
-      let hex = rgbToHex(r, g, b);
-      let name = approximateColorName(r, g, b);
-
-      let item = document.createElement('div');
-      item.className = 'color-item';
-      item.innerHTML = `
-        <div class="color-box" style="background: ${hex};"></div>
-        <div class="color-info">
-          <strong>${name}</strong><br/>
-          RGB(${r},${g},${b})<br/>
-          ${hex}
-        </div>
-      `;
-      colorResults.appendChild(item);
+    // ==== 5) EXPORT BUTTON EVENT (XLSX) ====
+    exportBtn.addEventListener('click', () => {
+      if (colorDataList.length === 0) {
+        alert("No color data to export. Please process an image first.");
+        return;
+      }
+      exportColorsToXLSX();
     });
-  }
-});
-</script>
+
+    function exportColorsToXLSX() {
+      // Create a new workbook
+      const wb = XLSX.utils.book_new();
+      wb.Props = {
+        Title: "Color Report",
+        Subject: "Image Color Extraction",
+        Author: "Your AI Tool",
+        CreatedDate: new Date()
+      };
+
+      // Create an array-of-arrays to define the worksheet data
+      // Header row:
+      const sheetData = [["R", "G", "B", "HEX", "Count", "Percentage"]];
+
+      // Fill rows
+      colorDataList.forEach((color) => {
+        sheetData.push([
+          color.r,
+          color.g,
+          color.b,
+          color.hex,
+          color.count,
+          color.percentage.toFixed(2) + "%"
+        ]);
+      });
+
+      // Convert to worksheet
+      const ws = XLSX.utils.aoa_to_sheet(sheetData);
+
+      // Add worksheet to workbook
+      XLSX.utils.book_append_sheet(wb, ws, "Colors");
+
+      // Trigger a file download
+      XLSX.writeFile(wb, "colorReport.xlsx");
+    }
+  </script>
+
 </body>
 </html>
